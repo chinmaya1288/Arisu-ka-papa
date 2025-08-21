@@ -1,23 +1,13 @@
 [
-{
-    "id": "6144c2722558c804",
-    "username": "xxx",
-    "password": "xxx",
-    "expiresAt": "2025-10-09",
-    "allowOffline": true
-  },
-  {
-    "id": "android_device_id_2",
-    "username": "user2",
-    "password": "pass2",
-    "expiresAt": "2025-11-30",
-    "allowOffline": false
-  }
-]
-{
-    "id": "6144c2722558c804",
-    "username": "2",
-    "password": "2",
-    "expiresAt": "2026-11-30",
-    "allowOffline": false
-}
+    {
+        "device_id": "device123",
+        "key": "key12345",
+        "expirydate": "31-12-2025",
+        "Allowoffline": true
+
+        [
+    {
+        "device_id": "d6144c2722558c804",
+        "key": "5",
+        "expirydate": "31-12-2035",
+        "Allowoffline": true
