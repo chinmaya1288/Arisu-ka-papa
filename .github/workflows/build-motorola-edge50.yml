@@ -65,7 +65,10 @@ jobs:
 
       - name: Download Motorola boot.img
         run: |
-          gdown "https://drive.google.com/uc?id=${{ env.BOOT_IMG_GDRIVE_ID }}" -O boot_moto.img
+          # Try gdown with fuzzy flag for large files (handles virus scan warning)
+          gdown --fuzzy "https://drive.google.com/file/d/${{ env.BOOT_IMG_GDRIVE_ID }}/view" -O boot_moto.img || \
+          gdown "${{ env.BOOT_IMG_GDRIVE_ID }}" -O boot_moto.img || \
+          curl -L "https://drive.usercontent.google.com/download?id=${{ env.BOOT_IMG_GDRIVE_ID }}&export=download&confirm=t" -o boot_moto.img
           ls -lh boot_moto.img
           file boot_moto.img
 
