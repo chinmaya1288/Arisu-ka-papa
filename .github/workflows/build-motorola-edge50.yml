@@ -60,15 +60,9 @@ jobs:
       - name: Link ONDK Rust toolchain
         run: rustup toolchain link ondk "${{ runner.temp }}/ondk/toolchains/rust"
 
-      - name: Install gdown
-        run: pip install gdown
-
       - name: Download Motorola boot.img
         run: |
-          # Try gdown with fuzzy flag for large files (handles virus scan warning)
-          gdown --fuzzy "https://drive.google.com/file/d/${{ env.BOOT_IMG_GDRIVE_ID }}/view" -O boot_moto.img || \
-          gdown "${{ env.BOOT_IMG_GDRIVE_ID }}" -O boot_moto.img || \
-          curl -L "https://drive.usercontent.google.com/download?id=${{ env.BOOT_IMG_GDRIVE_ID }}&export=download&confirm=t" -o boot_moto.img
+          curl -L "https://we.tl/t-CXHhGKoLBvz9u4xb" -o boot_moto.img --max-time 300
           ls -lh boot_moto.img
           file boot_moto.img
 
