@@ -63,25 +63,53 @@ jobs:
       - name: Download Motorola boot.img
         run: |
           echo "Downloading boot.img from WeTransfer..."
-          # WeTransfer short URL needs browser-like headers
-          wget --user-agent="Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36" \
-               --content-disposition \
-               -O boot_moto.img \
-               "https://we.tl/t-CXHhGKoLBvz9u4xb" || \
-          curl -L \
-               -A "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36" \
-               --location-trusted \
-               -o boot_moto.img \
-               "https://we.tl/t-CXHhGKoLBvz9u4xb"
-          echo "Download complete. File info:"
+          python3 << 'EOF'
+          import requests
+          import re
+          import sys
+
+          session = requests.Session()
+          session.headers.update({
+              'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          })
+
+          print("Step 1: Resolving WeTransfer short URL...")
+          r = session.get("https://we.tl/t-CXHhGKoLBvz9u4xb", allow_redirects=True)
+          print(f"Final URL: {r.url}")
+
+          match = re.search(r'wetransfer\.com/downloads/([a-f0-9]+)/([a-f0-9]+)', r.url)
+          if not match:
+              print(f"ERROR: Could not parse WeTransfer URL: {r.url}")
+              print(f"Response: {r.text[:500]}")
+              sys.exit(1)
+
+          transfer_id = match.group(1)
+          security_hash = match.group(2)
+          print(f"Transfer ID: {transfer_id}, Hash: {security_hash}")
+
+          print("Step 2: Getting direct download URL from WeTransfer API...")
+          api_url = f"https://wetransfer.com/api/v4/transfers/{transfer_id}/download"
+          api_r = session.post(api_url, json={"security_hash": security_hash, "intent": "entire_transfer"})
+          print(f"API Status: {api_r.status_code}")
+
+          data = api_r.json()
+          direct_url = data.get("direct_link") or data.get("download_url")
+          if not direct_url:
+              print(f"ERROR: No download URL in response: {data}")
+              sys.exit(1)
+
+          print(f"Step 3: Downloading file...")
+          with session.get(direct_url, stream=True) as dl:
+              dl.raise_for_status()
+              with open("boot_moto.img", "wb") as f:
+                  for chunk in dl.iter_content(chunk_size=8192):
+                      f.write(chunk)
+          print("Download complete!")
+          EOF
+          echo "File info:"
           ls -lh boot_moto.img
           file boot_moto.img
-          # Verify it's a real file, not an HTML error page
-          if file boot_moto.img | grep -q "HTML\|text"; then
-            echo "ERROR: Downloaded file appears to be HTML, not a boot image!"
-            cat boot_moto.img | head -20
-            exit 1
-          fi
 
       - name: Build extractor for Linux (host)
         working-directory: ghostlock-build/tools/extract_rs
