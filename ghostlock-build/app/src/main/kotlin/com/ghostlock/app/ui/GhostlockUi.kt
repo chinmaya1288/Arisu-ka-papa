@@ -163,8 +163,6 @@ internal fun GhostlockApp(
         surface = Color(0xFF120000),
         onSurface = Color(0xFFFFFFFF),
         surfaceVariant = Color(0xFF1A0000),
-        onSurfaceVariant = Color(0xFFCC9999),
-        outline = Color(0xFF880000),
     )
     val redBlackLight = lightColorScheme().copy(
         primary = Color(0xFFDD0000),
@@ -178,8 +176,6 @@ internal fun GhostlockApp(
         surface = Color(0xFF120000),
         onSurface = Color(0xFFFFFFFF),
         surfaceVariant = Color(0xFF1A0000),
-        onSurfaceVariant = Color(0xFFCC9999),
-        outline = Color(0xFF880000),
     )
     MiuixTheme(
         colors = if (isSystemInDarkTheme()) redBlackDark else redBlackLight,
