@@ -1,0 +1,155 @@
+name: Build GhostLock APK (Motorola Edge 50 Fusion - IMEI Locked)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/vivo-t4x-device-support-kki9qn
+
+env:
+  ONDK_VERSION: "r30.1"
+  MOTOROLA_IMEI: "359879766845352"
+  KERNEL_UNAME: "6.1.145-android14-11-g9b69cc399ae1-ab14819715"
+  BOOT_IMG_GDRIVE_ID: "1lU1Ov_W5gfQwvPBe8EFKKf-iYc-bM5P2"
+
+jobs:
+  extract-and-build:
+    name: Extract Offsets & Build APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: zulu
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ghostlock-build/tools/extract_rs/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('ghostlock-build/tools/extract_rs/Cargo.lock') }}
+
+      - name: Cache ONDK
+        id: ondk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ondk
+          key: ondk-${{ env.ONDK_VERSION }}-linux
+
+      - name: Download ONDK
+        if: steps.ondk-cache.outputs.cache-hit != 'true'
+        run: |
+          url="https://github.com/topjohnwu/ondk/releases/download/${ONDK_VERSION}/ondk-${ONDK_VERSION}-linux.tar.xz"
+          mkdir -p "${{ runner.temp }}/ondk"
+          curl -fL "$url" -o "${{ runner.temp }}/ondk.tar.xz"
+          tar -C "${{ runner.temp }}/ondk" --strip-components=1 -xf "${{ runner.temp }}/ondk.tar.xz"
+
+      - name: Link ONDK Rust toolchain
+        run: rustup toolchain link ondk "${{ runner.temp }}/ondk/toolchains/rust"
+
+      - name: Install gdown
+        run: pip install gdown
+
+      - name: Download Motorola boot.img
+        run: |
+          gdown "https://drive.google.com/uc?id=${{ env.BOOT_IMG_GDRIVE_ID }}" -O boot_moto.img
+          ls -lh boot_moto.img
+          file boot_moto.img
+
+      - name: Build extractor for Linux (host)
+        working-directory: ghostlock-build/tools/extract_rs
+        run: cargo build --release 2>&1
+
+      - name: Extract kernel offsets from boot.img
+        id: extract
+        run: |
+          EXTRACTOR="ghostlock-build/tools/extract_rs/target/release/ghostlock-extract"
+          KERNEL_DIR="ghostlock-build/src/kernels/${{ env.KERNEL_UNAME }}"
+
+          mkdir -p "$KERNEL_DIR"
+
+          echo "Running extractor on Motorola Edge 50 Fusion boot.img..."
+          set +e
+          "$EXTRACTOR" boot_moto.img \
+            --format c \
+            --name "motorola_edge50_fusion" \
+            --out "$KERNEL_DIR/offsets.h" \
+            2>&1 | tee extract_output.txt
+          EXIT_CODE=$?
+          set -e
+
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          cat extract_output.txt
+
+          if [ $EXIT_CODE -eq 6 ]; then
+            echo "::error::Kernel is already patched (exit code 6). This device cannot be supported."
+            exit 1
+          elif [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Extractor failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+          echo "Offsets extracted successfully!"
+          cat "$KERNEL_DIR/offsets.h"
+
+      - name: Update IMEI in MainActivity.kt
+        run: |
+          sed -i 's/imei == "866374078637818"/imei == "${{ env.MOTOROLA_IMEI }}"/' \
+            ghostlock-build/app/src/main/kotlin/com/ghostlock/app/ui/MainActivity.kt
+          grep -n 'imei ==' ghostlock-build/app/src/main/kotlin/com/ghostlock/app/ui/MainActivity.kt
+
+      - name: Build Ghostlock native binary
+        working-directory: ghostlock-build
+        run: |
+          export ANDROID_NDK_HOME="${{ runner.temp }}/ondk"
+          export NDK_ROOT="$ANDROID_NDK_HOME"
+          make ghostlock
+
+      - name: Build extractor for Android
+        working-directory: ghostlock-build/tools/extract_rs
+        run: |
+          export CC_aarch64_linux_android="${{ runner.temp }}/ondk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
+          export AR_aarch64_linux_android="${{ runner.temp }}/ondk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC_aarch64_linux_android"
+          export RUSTC_BOOTSTRAP=1
+          export RUSTFLAGS="-C force-unwind-tables=no -C link-arg=-Wl,--icf=all"
+          cargo +ondk build --release --target aarch64-linux-android \
+            -Z build-std=std,panic_abort -Z build-std-features=optimize_for_size
+
+      - name: Build Release APK
+        working-directory: ghostlock-build
+        run: |
+          export ONDK_HOME="${{ runner.temp }}/ondk"
+          export ANDROID_NDK_HOME="$ONDK_HOME"
+          export NDK_ROOT="$ONDK_HOME"
+          ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: |
+          find ghostlock-build/app/build/outputs/apk -name "*.apk" | head -1 | \
+            xargs -I{} cp {} GhostLock-MotoEdge50Fusion-IMEI-Locked.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhostLock-MotoEdge50Fusion
+          path: GhostLock-MotoEdge50Fusion-IMEI-Locked.apk
+
+      - name: Upload extracted offsets
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-offsets-moto-edge50
+          path: ghostlock-build/src/kernels/${{ env.KERNEL_UNAME }}/offsets.h
