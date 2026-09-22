@@ -62,9 +62,26 @@ jobs:
 
       - name: Download Motorola boot.img
         run: |
-          curl -L "https://we.tl/t-CXHhGKoLBvz9u4xb" -o boot_moto.img --max-time 300
+          echo "Downloading boot.img from WeTransfer..."
+          # WeTransfer short URL needs browser-like headers
+          wget --user-agent="Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36" \
+               --content-disposition \
+               -O boot_moto.img \
+               "https://we.tl/t-CXHhGKoLBvz9u4xb" || \
+          curl -L \
+               -A "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36" \
+               --location-trusted \
+               -o boot_moto.img \
+               "https://we.tl/t-CXHhGKoLBvz9u4xb"
+          echo "Download complete. File info:"
           ls -lh boot_moto.img
           file boot_moto.img
+          # Verify it's a real file, not an HTML error page
+          if file boot_moto.img | grep -q "HTML\|text"; then
+            echo "ERROR: Downloaded file appears to be HTML, not a boot image!"
+            cat boot_moto.img | head -20
+            exit 1
+          fi
 
       - name: Build extractor for Linux (host)
         working-directory: ghostlock-build/tools/extract_rs
